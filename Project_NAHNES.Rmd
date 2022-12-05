@@ -1,5 +1,5 @@
 ---
-title: "Project_NHANES"
+title: "Project 1"
 author: "Hao He"
 date: "12/4/2022"
 output: html_document
@@ -51,13 +51,13 @@ The specific variables of interests are listed below.
 `SLD013`:weekend sleep hours  
 `SLQ050`:ever told doctor had trouble sleeping  
 `SLQ120`:how often fell overly sleepy during day  
-`BPXSY1`:Systolic Blood Presure 1st measurement  
-`BPXSY2`:Systolic Blood Presure 2nd measurement  
-`BPXSY3`:Systolic Blood Presure 3rd measurement  
-`BPXDI1`:Diastolic Blood Presure 1st measurement  
-`BPXDI2`:Diastolic Blood Presure 2nd measurement  
-`BPXDI3`:Diastolic Blood Presure 3rd measurement
-`INDFMMPI`:Family monthly poverty level index defined by the ratio of a family's income over poverty guideline. Lower poverty level index indicates lower family income.
+`BPXSY1`:Systolic Blood Pressure 1st measurement  
+`BPXSY2`:Systolic Blood Pressure 2nd measurement  
+`BPXSY3`:Systolic Blood Pressure 3rd measurement  
+`BPXDI1`:Diastolic Blood Pressure 1st measurement  
+`BPXDI2`:Diastolic Blood Pressure 2nd measurement  
+`BPXDI3`:Diastolic Blood Pressure 3rd measurement   
+`INDFMMPI`:Family monthly poverty level index defined by the ratio of a family's income over poverty guideline. Lower poverty level index indicates lower family income.   
 `INDFMMPC`:Family monthly poverty level index category
 
 Since the raw data is hard to work with, we will first perform some data preparation and then provide table and visual summaries. 
