@@ -1,0 +1,199 @@
+---
+title: "Project_NHANES"
+author: "Hao He"
+date: "12/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(summarytools)
+library(DT)
+library(ggplot2)
+set.seed(123)
+```
+
+## Objectives and Introduction  
+
+This project is an extension of my previous work on exploring the relation between sleep disorder and blood pressure. My previous work can be found through this [link](https://github.com/hhaohe513/final_project), in which I used only sleep disorder and blood pressure data for years between 2017-2018 from NHANES(National Health and Nutrition Examination Survey). In this project, we will work on larger dataset from NAHNES including the pre-pandemic data from the year of 2017 to 2020. More variables of interests like income will also be included in this project.
+
+Specifically, the remaining parts of this report will investigate the following problem:
+
+>Are people's income and blood pressure condition related to their sleeping quality?
+
+We will start with some Exploratory Data Analysis(EDA) to describe and have some intuitions of our data.
+
+## EDA
+
+### Data import
+
+```{r load data, include = TRUE}
+# Importing data
+demo_raw = haven::read_xpt("P_DEMO.XPT")
+bp_raw = haven::read_xpt("P_BPXO.XPT")
+sleep_raw = haven::read_xpt("P_SLQ.XPT")
+income_raw = haven::read_xpt("P_INQ.XPT")
+```
+
+### Data Source and Description of Variable of Interests
+
+We will use the 2017-2020 Prepandemic NHANES [demographic](https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_DEMO.XPT),
+[sleep disorder](https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_SLQ.XPT), [income](https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_INQ.XPT) and
+[blood pressure](https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/P_BPQ.XPT) data
+for this analysis.    
+The specific variables of interests are listed below.  
+`SEQN`: id  
+`RIDAGEYR`: age
+`RIAGENDR` : gender
+`RIDSTATR`: status(status = 2 means that the subject is both interviewed and examined)  
+`SLD012`:weekday sleep hours  
+`SLD013`:weekend sleep hours  
+`SLQ050`:ever told doctor had trouble sleeping  
+`SLQ120`:how often fell overly sleepy during day  
+`BPXSY1`:Systolic Blood Presure 1st measurement  
+`BPXSY2`:Systolic Blood Presure 2nd measurement  
+`BPXSY3`:Systolic Blood Presure 3rd measurement  
+`BPXDI1`:Diastolic Blood Presure 1st measurement  
+`BPXDI2`:Diastolic Blood Presure 2nd measurement  
+`BPXDI3`:Diastolic Blood Presure 3rd measurement
+`INDFMMPI`:Family monthly poverty level index defined by the ratio of a family's income over poverty guideline. Lower poverty level index indicates lower family income.
+`INDFMMPC`:Family monthly poverty level index category
+
+Since the raw data is hard to work with, we will first perform some data preparation and then provide table and visual summaries. 
+
+### Data Manipulation and Feature Engineering
+
+From the section above we might notice that there are several variables representing the blood pressure level and sleep disorder status. Since there are sufficient number of observations, we will only use those data with valid readings and thus will filter out all the NA values. 
+
+Also, for the convenience of our analysis, we will create the following variables to represent the subjects' systolic 
+and diastolic blood pressure level, and whether the subject has sleep disorder
+or not.
+
+`BPXSY` : the average systolic blood pressure out of three measurements  
+
+`BPXDI` : the average diastolic blood pressure out of three measurements  
+
+`is_disorder` *= 1*  if any of the following conditions is met: weekday sleep
+hour less than 6, weekend sleep hour less than 7, have ever told doctor with
+trouble sleeping, feel overly sleepy for more than 15 times per month. And *= 0* otherwise.
+
+```{r some manipulation, include = TRUE}
+# Select data of interest from each raw dataset
+demo = demo_raw %>% 
+  select(id = SEQN, status = RIDSTATR, age = RIDAGEYR,
+         gender = RIAGENDR) %>%
+  filter(status == 2)
+# Select valid measurement by filtering readings greater than 0
+bp = bp_raw %>%
+  select(id = SEQN, BPXOSY1, BPXOSY2, BPXOSY3, BPXODI1, BPXODI2, BPXODI3) %>%
+  filter(BPXOSY1 >= 0 & BPXOSY2 >=0 & BPXOSY3 >= 0) %>%
+  filter(BPXODI1 >= 0 & BPXODI2 >=0 & BPXODI3 >= 0) %>%
+  mutate(BPXOSY = (BPXOSY1 + BPXOSY2 + BPXOSY3)/3) %>% 
+  mutate(BPXODI = (BPXODI1 + BPXODI2 + BPXODI3)/3)
+
+# Create new variable to determine if a person has sleep disorder
+sleep = sleep_raw %>%
+  select(id = SEQN, wkday_hour = SLD012, wkend_hour = SLD013,
+         told_doctor = SLQ050, over_sleepy = SLQ120) %>%
+  filter(wkday_hour < 15 & wkend_hour < 15 & told_doctor < 7 & 
+           over_sleepy < 5) %>%
+  mutate(is_disorder = ifelse(wkday_hour < 6 |
+                                wkend_hour < 7 |
+                                told_doctor == 1 |
+                                over_sleepy > 3,1,0))
+# Filter out NA data
+income = income_raw %>%
+  select(id = SEQN, povindex = INDFMMPI, povcat = INDFMMPC) %>%
+  filter(povindex > 0)
+# Merge all data frame together and select variables of interest
+merged = demo %>%
+  inner_join(sleep, by = "id") %>%
+  inner_join(bp, by = "id") %>%
+  inner_join(income, by = "id") %>%
+  select(id, age, gender, is_disorder, BPXOSY, BPXODI, povindex, povcat) %>%
+  mutate(gender = ifelse(gender == 1, "Male", "Female"))
+merged$gender = as.factor(merged$gender)
+merged$povcat = as.factor(merged$povcat)
+merged$is_disorder = as.factor(merged$is_disorder)
+```
+
+### Data summarization and Visualization
+
+Since we are mainly interested in finding relation between sleeping disorder and blood pressure and income, we will present tables with information of blood pressure and income of people with sleeping disorder and those without.
+
+```{r table1,include=FALSE}
+merged_normal = merged %>% filter(is_disorder == 0) %>% 
+  select(BPXOSY,BPXODI,povindex)
+merged_abnormal = merged %>% filter(is_disorder == 1)%>% 
+  select(BPXOSY,BPXODI,povindex)
+descr(merged_normal)
+descr(merged_abnormal)
+```
+
+```{r table2, include = TRUE}
+output_table = data.frame("Variables" = c("BPXSY","BPXDI","Income"),
+                        "mean_disorder" = c(124.30,74.64,2.347),
+                        "mean_normal" = c(122.29,73.17,2.513),
+                        "min_disorder" = c(79.67,41.67,0.03),
+                        "min_normal" = c(78.67,41.33,0.02),
+                        "max_disorder" = c(217.33,143.67,5),
+                        "max_normal" = c(214,137.67,5),
+                        "sd_disorder" = c(19.24,11.72,1.51),
+                        "sd_normal" = c(18.68,11.35,1.55))
+datatable(data = output_table)
+```
+
+In the following part, we will provide some visualizations of the variables grouped by the sleeping disorder status.
+
+```{r visualization1, include = TRUE}
+merged %>%
+  ggplot(aes(x=povcat,y=BPXOSY))+
+  geom_violin() +
+  geom_jitter(aes(color = is_disorder), alpha = 0.4, width = 0.1) +
+  labs(title = "Systolic Blood Presure by sleeping disorder status")
+```
+```{r visualization2, include = TRUE}
+merged %>%
+  ggplot(aes(x=povcat,y=BPXODI))+
+  geom_violin() +
+  geom_jitter(aes(color = is_disorder), alpha = 0.4, width = 0.1) +
+  labs(title = "Diastolic Blood Presure by sleeping disorder status")
+```
+### Correlation Analysis
+
+```{r correlation, include = TRUE}
+concise_merged = merged %>% 
+  select(is_disorder, BPXOSY, BPXODI, povcat, povindex)
+pairs(concise_merged)
+cor(concise_merged%>%select(BPXOSY,BPXODI,povindex))
+```
+
+
+From the output of our EDA, we may see that on average, the people who have sleep disorder tend to have higher blood pressure and lower income level on average. We may also observe from the violin plot from the data visualization section that the red observations representing people without sleep disorder to appear more often in the lower half of the distributions, meaning that they might have lower blood pressure. From the aspect of incomes, it seems like the data are evenly distributed across different groups.
+
+The correlation analysis suggests that there might be evidence of correaltion between systolic blood pressure and diastolic blood pressure, which makes sense. There is no evidence for clear correlation between income level and blood pressure.
+
+## Modelling and Inferences
+
+Since the main focus of this report is on inference rather than prediction or categorization, we will not deploy fancy models. We will only include the result of t-test and a basic fitting of logistic regression in this section. Since we are treating sleep disorder or not as our Y variable, and it's binary, fitting logistic regression using glm() would be the most appropriate.
+
+```{r ttest, include = TRUE}
+t.test(BPXOSY~is_disorder,data = merged)
+t.test(BPXODI~is_disorder,data = merged)
+t.test(povindex~is_disorder,data = merged)
+```
+```{r regression1,include=TRUE}
+logit1 = glm(is_disorder ~ age + gender + BPXOSY + BPXODI + povindex,
+    data = merged, family = "binomial")
+summary(logit1)
+```
+
+
+
+## Evaluations and Results
+
+The results from t-test and regression agrees with each other, suggesting that there is significant difference in systolic blood pressure, diastolic blood pressure and income level for those people with sleep disorder compared to those without. 
+
+In summary, people with sleep disorder tends to have high blood pressure and lower income level. However, we must notice that this report is done in an very simplistic way in terms of methods. We only included three explanatory variables in our analysis, while there are much more possible options as explanatory variables like smoking or not, use of alcohol etc. We may also try to form this problem into an categorization problem or prediction problem in future studies. Since the observations in the dataset are abundant, we could use machine learning methods and techniques like cross-validation to compare with models. 
+
